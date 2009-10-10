@@ -1,0 +1,150 @@
+Integrity
+=========
+
+Integrity is your friendly automated Continuous Integration server. As soon
+as you push your commits, it builds your code, run your tests and makes sure
+everything works fine. It then reports the build status using various notifiers
+back to you and your team so everyone is on the same page and problems can be
+fixed right away.
+
+Read more about about Continuous Integration on
+http://martinfowler.com/articles/continuousIntegration.html[Martin Fowler's
+website] and http://en.wikipedia.org/wiki/Continuous_Integration[Wikipedia].
+
+== Installation
+.Make sure you meet theses requirements:
+* Ruby >= 1.8.X
+* RubyGems >= 1.3.5
+* Git >= 1.6
+
+NOTE: Although Integrity is written in Ruby, it doesn't care about what
+      you're using. See FAQs xref:faq-tech[1] and xref:faq-scm[2] for details.
+
+[source, shell]
+git clone git://github.com/integrity/integrity
+gem install http://github.com/wycats/bundler
+gem bundle
+
+If you want give it a quick try before going any further, run `rake db &&
+rackup` and navigate to http://0.0.0.0:9292.
+
+=== Configuration
+The configuration is located into `init.rb` by default.
+
+==== Post-Receive Hook
+If you're using GitHub, point your
+http://github.com/guides/post-receive-hooks[Post-Receive Hook] to
+http://ci.example.org/push/TOKEN.
+_Patches to add http://github/integrity/bobette[support for other services] are
+very welcome._
+
+==== Choosing a build engine
+Integrity ships with two build engines:
+
+`Integrity::ThreadedBuilder`::
+It uses a pool of threads to build your code in the background. The `:size`
+argument is the number of threads that should be created. It works great in
+most of the cases and don't require any external process.
+`Integrity::DelayedBuilder`::
+The builds are pushed into a queue and then processed by a number of workers.
+See http://github.com/tobi/delayed_job[DelayedJob] for more details.
+
+.Other settings
+database:: It can be any valid database URI as defined by
+           http://datamapper.rubyforge.org/dm-core/DataMapper.html[DataMapper].
+           Examples:
+            * `sqlite3:integrity.db`
+            * `mysql://user:password@localhost/integrity`
+            * `postgres://user:password@localhost/integrity`
+
+NOTE: You'll need to install the apropriate `data_objects` adapter as well.
+      Example: `gem install do_sqlite3`.
+
+directory:: This is where your project's code will be checked out. Make sure it
+            is writeable by the user that runs Integrity.
+log:: Path to the log file.
+build_all:: Wheter every commit included into a post-receive hooks should be
+            build or just the newest. Either `true` or `false`.
+
+=== Deployement
+==== http://heroku.com[Heroku]
+Heroku is the easiest and fastest way to deploy Integrity. However, due to
+it's architecture, it isn't possible to access repository over ssh.
+
+[source, shell]
+$ gem install heroku
+$ heroku create
+$ git push heroku master
+$ heroku rake db
+$ heroku open
+
+==== http://modrails.com[Phusion Passenger]
+Please see Passenger's awesome documentation for
+http://www.modrails.com/documentation/Users%20guide%20Apache.html[Apache] and
+http://www.modrails.com/documentation/Users%20guide%20Nginx.html[Nginx].
+
+==== http://code.macournoyer.com/thin/[Thin]
+[source, shell]
+$ gem install thin
+$ $EDITOR doc/thin.yml
+$ thin -C doc/thin.yml start
+
+Then, configure a web proxy. Examples:
+
+.Nginx as a reverse-proxy
+----
+http {
+  upstream builder-integrityapp-com {
+  server 127.0.0.1:8910;
+  server 127.0.0.1:8911;
+}
+
+server {
+  server_name builder.integrityapp.com;
+  location / {
+    proxy_pass http://builder-integrityapp-com;
+  }
+}
+----
+
+.Apache acting as reverse proxy to a cluster of thin instances
+----
+<VirtualHost *>
+  <Proxy>
+    Order deny,allow
+    Allow from all
+  </Proxy>
+
+  RedirectMatch ^/integrity$ /integrity/
+  ProxyRequests Off
+  ProxyPass /integrity/ http://localhost:8910/
+  ProxyHTMLURLMap http://localhost:8910 /integrity
+
+  <Location /integrity>
+    ProxyPassReverse /
+    SetOutputFilter proxy-html
+    ProxyHTMLURLMap / /integrity/
+    ProxyHTMLURLMap /integrity/ /integrity
+  </Location>
+</VirtualHost>
+----
+
+NOTE: If you run Integrity with another deployment strategy please drop us
+      us a line at <info@integrityapp.com> and let us know what config
+      worked for you so we can include it here.
+
+=== FAQ
+==== Does it support Subversion or any other code SCM?
+[[faq-scm]]
+In short, no. We'd love it to but we're missing actual people using it. If you
+need it, please do `git revert <sha1>` and tell us how it go. Bonus for
+patches, of course.
+
+==== But does it work with <insert tech here>?
+[[faq-tech]]
+**Absolutely!** As long as your build process can be run from an UNIX-y
+environment and that it returns a *zero* status code for success and
+*non-zero* for failure, then Integrity works for you. _We welcome patch to
+make it more friendly to other environments._
+
+// vim: set syntax=asciidoc:
